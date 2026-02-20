@@ -1,9 +1,8 @@
-name: Upstream Sync (Safe Merge)
+name: Upstream Sync (Safe + Unrelated History Proof)
 
 on:
   schedule:
-    # Runs every day at 10 PM CST (04:00 UTC)
-    - cron: "0 4 * * *"
+    - cron: "0 4 * * *"   # Daily 10 PM CST
   workflow_dispatch:
 
 permissions:
@@ -24,10 +23,13 @@ jobs:
           git remote add upstream https://github.com/mohamedirfankader/databricks-code-repo.git || true
           git fetch upstream
 
-      - name: Merge upstream changes safely
+      - name: Sync upstream safely (handles unrelated histories)
         run: |
           git checkout main
-          git merge upstream/main --no-edit
+
+          # Try normal merge first
+          git merge upstream/main --no-edit || \
+          git merge upstream/main --allow-unrelated-histories --no-edit
 
       - name: Push updates
         run: |
