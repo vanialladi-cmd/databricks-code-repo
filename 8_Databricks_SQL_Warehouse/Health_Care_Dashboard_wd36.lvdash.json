@@ -36,10 +36,48 @@
       "name": "57a10bdc",
       "displayName": "drugs_patients_data",
       "queryLines": [
-        "SELECT d.*,p.*,decimal(p.TotalCharges) as TotalCharges_decimal \r\n",
+        "--denormalized/wide/fat fact (As a part of wrangling in the Dataengg pipeline, this table denorm_wide_fact is already enabled by Dataengineers)\r\n",
+        "--create table denorm_wide_fact as\r\n",
+        "/*SELECT d.*,p.*,decimal(p.TotalCharges) as TotalCharges_decimal \r\n",
         "FROM drug_info d inner join patients p \r\n",
         "on d.uniqueID=p.drugid\r\n",
-        "where trim(TotalCharges)<>''"
+        "where trim(TotalCharges)<>''*/\r\n",
+        "\r\n",
+        "--Below Query/Declarative/Imperative Pipeline will be created by our Data engineers\r\n",
+        "/*\r\n",
+        "create or replace table drug_patients_wide_fact as\r\n",
+        "--This is my Star Schema Model Query\r\n",
+        "SELECT d.*,p.*,decimal(p.TotalCharges) as TotalCharges_decimal \r\n",
+        "FROM catalog1_we47.default.drug_info d inner join catalog1_we47.default.patients p \r\n",
+        "on d.uniqueID=p.drugid\r\n",
+        "where trim(TotalCharges)<>'';\r\n",
+        "\r\n",
+        "create or refresh materialized view drug_patients_wide_fact_mat_vw as \r\n",
+        "select * from drug_patients_wide_fact;\r\n",
+        "*/\r\n",
+        "\r\n",
+        "select * from drug_patients_wide_fact_mat_vw;"
+      ],
+      "columns": [
+        {
+          "displayName": "ratepc",
+          "description": "rating percentage",
+          "expression": "rating/100"
+        }
+      ],
+      "catalog": "catalog1_we47",
+      "schema": "gold_layer"
+    },
+    {
+      "name": "462534ef",
+      "displayName": "drugs_patients_aggr_fact",
+      "queryLines": [
+        "--Aggregated/summary fact\r\n",
+        "SELECT rating,Multipleillness,InPatient,count(1) as cnt,sum(double(p.TotalCharges)) sum_tot_charges\r\n",
+        "FROM drug_info d inner join patients p \r\n",
+        "on d.uniqueID=p.drugid\r\n",
+        "where trim(TotalCharges)<>''\r\n",
+        "group by rating,Multipleillness,InPatient"
       ],
       "columns": [
         {
@@ -50,6 +88,17 @@
       ],
       "catalog": "catalog1_we47",
       "schema": "default"
+    },
+    {
+      "name": "e2e4bb59",
+      "displayName": "gold_staff_geo_fact",
+      "queryLines": [
+        "SELECT distinct staff_geo.shipment_id,staff_geo.age,staff_geo.origin_hub_city,staff_geo.load_dt,staff_geo.staff_full_name,staff_geo.hub_location,\r\n",
+        "cast(staff_geo.latitude as double) as latitude ,cast(staff_geo.longitude as double) as longitude,geo.country \r\n",
+        "FROM workspace.default.gold_staff_geo_enriched_dlt2 staff_geo \r\n",
+        "inner join catalog1_we47.default.master_city_list geo\r\n",
+        "on staff_geo.hub_location = geo.city_name;"
+      ]
     }
   ],
   "pages": [
@@ -589,12 +638,12 @@
                       "expression": "`condition`"
                     },
                     {
-                      "name": "usefulCount",
-                      "expression": "`usefulCount`"
+                      "name": "sum(usefulCount)",
+                      "expression": "SUM(`usefulCount`)"
                     },
                     {
-                      "name": "uniqueID",
-                      "expression": "`uniqueID`"
+                      "name": "count(uniqueID)",
+                      "expression": "COUNT(`uniqueID`)"
                     },
                     {
                       "name": "rating",
@@ -606,7 +655,7 @@
                       "expression": "IN_RANGE(`rating`, 7, 10)"
                     }
                   ],
-                  "disaggregated": true
+                  "disaggregated": false
                 }
               }
             ],
@@ -628,12 +677,12 @@
                     "displayName": "Condition"
                   },
                   {
-                    "fieldName": "usefulCount",
+                    "fieldName": "sum(usefulCount)",
                     "displayName": "Useful Count"
                   },
                   {
-                    "fieldName": "uniqueID",
-                    "displayName": "Drug ID"
+                    "fieldName": "count(uniqueID)",
+                    "displayName": "count Drug ID"
                   },
                   {
                     "fieldName": "rating",
@@ -664,12 +713,21 @@
                       "expression": "`drugName`"
                     },
                     {
+                      "name": "condition",
+                      "expression": "`condition`"
+                    },
+                    {
                       "name": "rating",
                       "expression": "`rating`"
                     },
                     {
                       "name": "sum(usefulCount)",
                       "expression": "SUM(`usefulCount`)"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`condition` IN ('Allergic Reactions', 'Allergic Rhinitis', 'Allergies', 'Conjunctivitis, Allergic')"
                     }
                   ],
                   "cubeGroupingSets": {
@@ -681,6 +739,7 @@
                       },
                       {
                         "fieldNames": [
+                          "condition",
                           "rating"
                         ]
                       }
@@ -691,6 +750,10 @@
                     {
                       "direction": "ASC",
                       "expression": "`drugName`"
+                    },
+                    {
+                      "direction": "ASC",
+                      "expression": "`condition`"
                     },
                     {
                       "direction": "ASC",
@@ -710,6 +773,9 @@
                   }
                 ],
                 "columns": [
+                  {
+                    "fieldName": "condition"
+                  },
                   {
                     "fieldName": "rating"
                   }
@@ -1371,6 +1437,412 @@
             "width": 12,
             "height": 6
           }
+        },
+        {
+          "widget": {
+            "name": "stacked-bar-chart",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "57a10bdc",
+                  "fields": [
+                    {
+                      "name": "SeniorCitizen",
+                      "expression": "`SeniorCitizen`"
+                    },
+                    {
+                      "name": "sum(DrugCharges)",
+                      "expression": "SUM(`DrugCharges`)"
+                    },
+                    {
+                      "name": "sum(TotalCharges_decimal)",
+                      "expression": "SUM(`TotalCharges_decimal`)"
+                    },
+                    {
+                      "name": "sum(usefulCount)",
+                      "expression": "SUM(`usefulCount`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "frame": {
+                "showTitle": true,
+                "title": "Stacked Bar Chart"
+              },
+              "mark": {
+                "colors": [
+                  {
+                    "themeColorType": "visualizationColors",
+                    "position": 1
+                  },
+                  {
+                    "themeColorType": "visualizationColors",
+                    "position": 2
+                  },
+                  {
+                    "themeColorType": "selectionColor"
+                  },
+                  {
+                    "themeColorType": "visualizationColors",
+                    "position": 4
+                  },
+                  {
+                    "themeColorType": "visualizationColors",
+                    "position": 5
+                  },
+                  {
+                    "themeColorType": "visualizationColors",
+                    "position": 6
+                  },
+                  {
+                    "themeColorType": "visualizationColors",
+                    "position": 7
+                  }
+                ]
+              },
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "SeniorCitizen",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "fields": [
+                    {
+                      "fieldName": "sum(DrugCharges)"
+                    },
+                    {
+                      "fieldName": "sum(TotalCharges_decimal)"
+                    },
+                    {
+                      "fieldName": "sum(usefulCount)"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "24a747fa",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "57a10bdc",
+                  "fields": [
+                    {
+                      "name": "monthly(date)",
+                      "expression": "DATE_TRUNC(\"MONTH\", `date`)"
+                    },
+                    {
+                      "name": "sum(DrugCharges)",
+                      "expression": "SUM(`DrugCharges`)"
+                    },
+                    {
+                      "name": "sum(usefulCount)",
+                      "expression": "SUM(`usefulCount`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "frame": {
+                "showTitle": true,
+                "title": "Stacked Bar Chart"
+              },
+              "mark": {
+                "colors": [
+                  {
+                    "themeColorType": "visualizationColors",
+                    "position": 1
+                  },
+                  {
+                    "themeColorType": "selectionColor"
+                  },
+                  {
+                    "themeColorType": "visualizationColors",
+                    "position": 4
+                  },
+                  {
+                    "themeColorType": "visualizationColors",
+                    "position": 5
+                  },
+                  {
+                    "themeColorType": "visualizationColors",
+                    "position": 6
+                  },
+                  {
+                    "themeColorType": "visualizationColors",
+                    "position": 7
+                  }
+                ]
+              },
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "monthly(date)",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "fields": [
+                    {
+                      "fieldName": "sum(DrugCharges)"
+                    },
+                    {
+                      "fieldName": "sum(usefulCount)"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 6,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "this-visual-created-from-aggregated-table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "462534ef",
+                  "fields": [
+                    {
+                      "name": "sum(sum_tot_charges)",
+                      "expression": "SUM(`sum_tot_charges`)"
+                    },
+                    {
+                      "name": "InPatient",
+                      "expression": "`InPatient`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "frame": {
+                "showTitle": true,
+                "title": "This Visual is created from the Aggregated Table"
+              },
+              "widgetType": "pie",
+              "encodings": {
+                "angle": {
+                  "fieldName": "sum(sum_tot_charges)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "InPatient",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 12,
+            "width": 6,
+            "height": 7
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    },
+    {
+      "name": "7b95d1ea",
+      "displayName": "geo_map_view",
+      "layout": [
+        {
+          "widget": {
+            "name": "9abb8af3",
+            "multilineTextboxSpec": {
+              "lines": [
+                "<span style=\"text-align:center;display:block\"><span style=\"color:#FFAB00;font-size:36px;line-height:1.5\">Geo Data (Location/GeoPoints) Visuals</span></span>"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "cf6fdf77",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "e2e4bb59",
+                  "fields": [
+                    {
+                      "name": "origin_hub_city",
+                      "expression": "`origin_hub_city`"
+                    },
+                    {
+                      "name": "count(*)",
+                      "expression": "COUNT(`*`)"
+                    },
+                    {
+                      "name": "country",
+                      "expression": "`country`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "choropleth-map",
+              "encodings": {
+                "color": {
+                  "fieldName": "origin_hub_city",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "extra": [
+                  {
+                    "fieldName": "count(*)"
+                  }
+                ],
+                "region": {
+                  "regionType": "mapbox-v4-admin",
+                  "admin0": {
+                    "fieldName": "country",
+                    "type": "field",
+                    "geographicRole": "admin0-iso-3166-1-alpha-3"
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 12,
+            "height": 10
+          }
+        },
+        {
+          "widget": {
+            "name": "geo-point-map-plot-number-driver-events-globe",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "e2e4bb59",
+                  "fields": [
+                    {
+                      "name": "count(*)",
+                      "expression": "COUNT(`*`)"
+                    },
+                    {
+                      "name": "latitude",
+                      "expression": "`latitude`"
+                    },
+                    {
+                      "name": "longitude",
+                      "expression": "`longitude`"
+                    },
+                    {
+                      "name": "hub_location",
+                      "expression": "`hub_location`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Geo Point map to plot the number of driver events happing across the globe"
+              },
+              "mark": {
+                "opacity": 1
+              },
+              "widgetType": "symbol-map",
+              "encodings": {
+                "coordinates": {
+                  "latitude": {
+                    "fieldName": "latitude"
+                  },
+                  "longitude": {
+                    "fieldName": "longitude"
+                  }
+                },
+                "color": {
+                  "fieldName": "count(*)",
+                  "scale": {
+                    "type": "quantitative",
+                    "colorRamp": {
+                      "mode": "scheme",
+                      "scheme": "reds"
+                    }
+                  }
+                },
+                "size": {
+                  "fieldName": "count(*)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "extra": [
+                  {
+                    "fieldName": "hub_location"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 12,
+            "width": 12,
+            "height": 11
+          }
         }
       ],
       "pageType": "PAGE_TYPE_CANVAS",
@@ -1379,7 +1851,36 @@
   ],
   "uiSettings": {
     "theme": {
-      "widgetHeaderAlignment": "ALIGNMENT_UNSPECIFIED"
+      "canvasBackgroundColor": {
+        "light": "#FFFFFF",
+        "dark": "#000000"
+      },
+      "widgetBackgroundColor": {
+        "light": "#FFFFFF",
+        "dark": "#000000"
+      },
+      "widgetBorderColor": {
+        "light": "#000000",
+        "dark": "#00FF00"
+      },
+      "fontColor": {
+        "light": "#000000",
+        "dark": "#00FF00"
+      },
+      "selectionColor": {
+        "light": "#FF00FF",
+        "dark": "#FFFFFF"
+      },
+      "visualizationColors": [
+        "#EE7733",
+        "#0077BB",
+        "#33BBEE",
+        "#EE3377",
+        "#CC3311",
+        "#009988",
+        "#BBBBBB"
+      ],
+      "widgetHeaderAlignment": "LEFT"
     },
     "applyModeEnabled": false
   }
