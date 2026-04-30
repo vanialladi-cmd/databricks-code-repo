@@ -1,7 +1,7 @@
 import dlt
 
 # ====================================================================
-# 3. GOLD LAYER: SCD TYPE 2 (Historical Tracking + Deletes)
+# 3. GOLD LAYER: SCD TYPE 2 (Historical Tracking + Soft Deletes)
 # ====================================================================
 dlt.create_streaming_table(
     name="telecom_gold.dim_towers1_gold_scd2",
@@ -12,13 +12,11 @@ dlt.apply_changes(
     target="telecom_gold.dim_towers1_gold_scd2",
     source="telecom_silver.dim_towers1_silver", # Cleaned Silver data source 
     keys=["tower_id"],                        # Primary key
-    sequence_by="updated_at",                 # Logical clock to handle out-of-order data 
+    sequence_by="updated_at",                 # Ensures the latest row wins if data arrives out of order
     
-    # Decommissioned towers will be marked as deleted in the SCD history 
+    # Decommissioned towers will be marked as soft deleted (updated_at) in the SCD history 
     apply_as_deletes="network_type = 'DECOM'", 
-    
-    stored_as_scd_type=2,
-    
+    stored_as_scd_type=2,    
     # Specify columns that trigger a new historical row when they change 
     track_history_column_list=[
         "tower_name", 

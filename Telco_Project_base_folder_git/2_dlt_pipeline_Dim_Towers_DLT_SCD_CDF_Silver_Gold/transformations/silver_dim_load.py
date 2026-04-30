@@ -11,11 +11,10 @@ from pyspark.sql.functions import col, upper, trim, when
 # Data Quality Expectation: Drop the row completely if tower_id is missing
 @dlt.expect_or_drop("valid_tower_id", "tower_id IS NOT NULL")
 def load_tower_silver():
-    # Read the stream from the Bronze table created in the previous step
-    # This automatically tracks changes using Spark Structured Streaming
+    # Read the stream from the Bronze table created in the previous step, This automatically tracks changes using Spark Structured Streaming
     raw_stream = spark.readStream.table("telecom_bronze.bronze_dim_tower")
     
-    # Apply Transformation Logic based on your source requirements
+    # Apply Transformation Logics
     cleaned_stream = (
         raw_stream
         # 1. Standardize text: Uppercase the state and region for reporting consistency
